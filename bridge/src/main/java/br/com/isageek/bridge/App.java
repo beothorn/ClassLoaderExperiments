@@ -1,4 +1,4 @@
-package br.com.isageek;
+package br.com.isageek.bridge;
 
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
@@ -8,28 +8,33 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 
 public class App {
+
+    static URLClassLoader serverLoader;
+    static URLClassLoader clientLoader;
+
     public static void main( String[] args ) throws IOException, ClassNotFoundException, NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        loadAndRun(
-            "server-1.0-SNAPSHOT-jar-with-dependencies.jar",
-            "br.com.isageek.App"
+        serverLoader = loadAndRun(
+                "server-1.0-SNAPSHOT-jar-with-dependencies.jar",
+                "br.com.isageek.App"
         );
-        loadAndRun(
+        clientLoader = loadAndRun(
                 "client-1.0-SNAPSHOT-jar-with-dependencies.jar",
                 "br.com.isageek.App"
         );
     }
 
-    private static void loadAndRun(final String jarFileName, final String mainClassQualifiedName) throws IOException, ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    private static URLClassLoader loadAndRun(final String jarFileName, final String mainClassQualifiedName) throws IOException, ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         File tempJarFile = extractResourceToTempFile(jarFileName);
 
         // Load the JAR using URLClassLoader
         URL jarUrl = tempJarFile.toURI().toURL();
-        try(URLClassLoader classLoader = new URLClassLoader(new URL[] { jarUrl }, null)){ // null parent to avoid clashes
+        try(URLClassLoader classLoader = new URLClassLoader(new URL[] { jarUrl })){
             // Load the main class from the JAR
             Class<?> mainClass = classLoader.loadClass(mainClassQualifiedName);
 
             Method mainMethod = mainClass.getMethod("main", String[].class);
             mainMethod.invoke(null, (Object) new String[] {});
+            return classLoader;
         }
     }
 
@@ -52,5 +57,17 @@ public class App {
             resourceStream.close();
         }
         return tempFile;
+    }
+
+    public static void callBridge(String payload){
+        System.out.println("[Bridge] Received from client: " + payload);
+
+        try {
+            Class<?> mainClass = serverLoader.loadClass("br.com.isageek.App");
+            Method mainMethod = mainClass.getMethod("bridgeReceive", String.class);
+            mainMethod.invoke(null, payload);
+        } catch (NoSuchMethodException | ClassNotFoundException | InvocationTargetException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

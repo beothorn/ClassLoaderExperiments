@@ -1,4 +1,4 @@
-package br.com.isageek;
+package br.com.isageek.bridge;
 
 import static org.junit.Assert.assertTrue;
 
