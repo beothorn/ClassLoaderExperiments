@@ -6,15 +6,16 @@ import net.bytebuddy.asm.Advice;
 import net.bytebuddy.asm.Advice.AllArguments;
 import net.bytebuddy.asm.Advice.OnMethodEnter;
 import net.bytebuddy.asm.Advice.Origin;
+import net.bytebuddy.dynamic.DynamicType;
 import net.bytebuddy.dynamic.loading.ClassReloadingStrategy;
 import net.bytebuddy.matcher.ElementMatchers;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.file.Files;
 
 public class App {
 
@@ -30,63 +31,60 @@ public class App {
             return;
         }
 
-        File serverJar = extractResourceToTempFile("server-1.0-SNAPSHOT-jar-with-dependencies.jar");
+        File serverDir = new File("../server/target/output");
+        File[] serverJarFiles = serverDir.listFiles((dir, name) -> name.endsWith(".jar"));
+        URL[] serverJarUrls;
 
-        // Load the JAR using URLClassLoader
-        URL serverJarUrl = serverJar.toURI().toURL();
-        try(URLClassLoader serverClassLoader = new URLClassLoader(new URL[] {serverJarUrl})){
+        if (serverJarFiles != null) {
+            serverJarUrls = new URL[serverJarFiles.length];
+            for (int i = 0; i < serverJarFiles.length; i++) {
+                serverJarUrls[i] = serverJarFiles[i].toURI().toURL();
+            }
+        } else {
+            throw new RuntimeException("[Bridge] No JAR files found in the directory '" + serverDir.getAbsolutePath() +"'");
+        }
+
+        try(URLClassLoader serverClassLoader = new URLClassLoader(serverJarUrls)){
             // Load the main class from the JAR
-            Class<?> mainClass1 = serverClassLoader.loadClass("br.com.isageek.App");
+            Class<?> serverMainClass = serverClassLoader.loadClass("br.com.isageek.App");
 
-            Method mainMethod1 = mainClass1.getMethod("main", String[].class);
+            Method mainMethod1 = serverMainClass.getMethod("main", String[].class);
             mainMethod1.invoke(null, (Object) new String[] {});
             serverLoader = serverClassLoader;
         }
 
+        File clientDir = new File("../client/target/output");
+        File[] clientJarFiles = clientDir.listFiles((dir, name) -> name.endsWith(".jar"));
+        URL[] clientJarUrls;
 
-        File clientJar = extractResourceToTempFile("client-1.0-SNAPSHOT-jar-with-dependencies.jar");
+        if (clientJarFiles != null) {
+            clientJarUrls = new URL[clientJarFiles.length];
+            for (int i = 0; i < clientJarFiles.length; i++) {
+                clientJarUrls[i] = clientJarFiles[i].toURI().toURL();
+            }
+        } else {
+            throw new RuntimeException("[Bridge] No JAR files found in the directory '" + clientDir.getAbsolutePath() +"'");
+        }
 
-        // Load the JAR using URLClassLoader
-        URL clientJarUrl = clientJar.toURI().toURL();
-        try(URLClassLoader clientClassLoader = new URLClassLoader(new URL[] { clientJarUrl })){
+        try(URLClassLoader clientClassLoader = new URLClassLoader(clientJarUrls)){
 
             Class<?> targetClass = clientClassLoader.loadClass("br.com.isageek.App");
 
-            // Modify the class
-            new ByteBuddy()
+            try(DynamicType.Unloaded<?> callServer = new ByteBuddy()
                     .redefine(targetClass)
                     .visit(Advice.to(MethodInterceptor.class).on(ElementMatchers.named("callServer")))
                     .make()
-                    .load(targetClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+            ) {
+                callServer.load(targetClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+            }
 
             // Load the main class from the JAR
-            Class<?> mainClass = clientClassLoader.loadClass("br.com.isageek.App");
+            Class<?> clientMainClass = clientClassLoader.loadClass("br.com.isageek.App");
 
-            Method mainMethod = mainClass.getMethod("main", String[].class);
+            Method mainMethod = clientMainClass.getMethod("main", String[].class);
             mainMethod.invoke(null, (Object) new String[] {});
             clientLoader = clientClassLoader;
         }
-    }
-
-    private static File extractResourceToTempFile(String resourceName) throws IOException {
-        InputStream resourceStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(resourceName);
-        if (resourceStream == null) {
-            throw new FileNotFoundException("Resource not found: " + resourceName);
-        }
-
-        File tempFile = Files.createTempFile("temp-", ".jar").toFile();
-        tempFile.deleteOnExit();
-
-        try (OutputStream out = Files.newOutputStream(tempFile.toPath())) {
-            byte[] buffer = new byte[1024];
-            int bytesRead;
-            while ((bytesRead = resourceStream.read(buffer)) != -1) {
-                out.write(buffer, 0, bytesRead);
-            }
-        } finally {
-            resourceStream.close();
-        }
-        return tempFile;
     }
 
     public static void dispatch(String payload) {
@@ -96,7 +94,7 @@ public class App {
             Method mainMethod = mainClass.getMethod("bridgeReceive", String.class);
             mainMethod.invoke(null, payload);
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
@@ -113,7 +111,6 @@ public class App {
                 Method mainMethod = mainClass.getMethod("dispatch", String.class);
                 mainMethod.invoke(null, allArguments[0]);
             } catch (Exception e) {
-                e.printStackTrace();
                 throw new RuntimeException(e);
             }
             return true; // Indicate to skip the original method execution

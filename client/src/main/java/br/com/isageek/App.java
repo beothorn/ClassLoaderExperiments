@@ -1,14 +1,13 @@
 package br.com.isageek;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import org.apache.commons.lang3.StringUtils;
 
 public class App
 {
     public static void main( String[] args )
     {
         System.out.println("[Client] Hello World! Client");
-        callServer("Some data");
+        callServer(StringUtils.upperCase("Some data"));
     }
 
     private static void callServer(String payload) {
