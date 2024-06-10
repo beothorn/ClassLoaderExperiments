@@ -1,5 +1,14 @@
 package br.com.isageek.bridge;
 
+import net.bytebuddy.ByteBuddy;
+import net.bytebuddy.agent.ByteBuddyAgent;
+import net.bytebuddy.asm.Advice;
+import net.bytebuddy.asm.Advice.AllArguments;
+import net.bytebuddy.asm.Advice.OnMethodEnter;
+import net.bytebuddy.asm.Advice.Origin;
+import net.bytebuddy.dynamic.loading.ClassReloadingStrategy;
+import net.bytebuddy.matcher.ElementMatchers;
+
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -13,28 +22,49 @@ public class App {
     static URLClassLoader clientLoader;
 
     public static void main( String[] args ) throws IOException, ClassNotFoundException, NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        serverLoader = loadAndRun(
-                "server-1.0-SNAPSHOT-jar-with-dependencies.jar",
-                "br.com.isageek.App"
-        );
-        clientLoader = loadAndRun(
-                "client-1.0-SNAPSHOT-jar-with-dependencies.jar",
-                "br.com.isageek.App"
-        );
-    }
+        try {
+            // Install the ByteBuddy agent
+            ByteBuddyAgent.install();
+        } catch (IllegalStateException e) {
+            System.err.println("ByteBuddy agent installation failed: " + e.getMessage());
+            return;
+        }
 
-    private static URLClassLoader loadAndRun(final String jarFileName, final String mainClassQualifiedName) throws IOException, ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        File tempJarFile = extractResourceToTempFile(jarFileName);
+        File serverJar = extractResourceToTempFile("server-1.0-SNAPSHOT-jar-with-dependencies.jar");
 
         // Load the JAR using URLClassLoader
-        URL jarUrl = tempJarFile.toURI().toURL();
-        try(URLClassLoader classLoader = new URLClassLoader(new URL[] { jarUrl })){
+        URL serverJarUrl = serverJar.toURI().toURL();
+        try(URLClassLoader serverClassLoader = new URLClassLoader(new URL[] {serverJarUrl})){
             // Load the main class from the JAR
-            Class<?> mainClass = classLoader.loadClass(mainClassQualifiedName);
+            Class<?> mainClass1 = serverClassLoader.loadClass("br.com.isageek.App");
+
+            Method mainMethod1 = mainClass1.getMethod("main", String[].class);
+            mainMethod1.invoke(null, (Object) new String[] {});
+            serverLoader = serverClassLoader;
+        }
+
+
+        File clientJar = extractResourceToTempFile("client-1.0-SNAPSHOT-jar-with-dependencies.jar");
+
+        // Load the JAR using URLClassLoader
+        URL clientJarUrl = clientJar.toURI().toURL();
+        try(URLClassLoader clientClassLoader = new URLClassLoader(new URL[] { clientJarUrl })){
+
+            Class<?> targetClass = clientClassLoader.loadClass("br.com.isageek.App");
+
+            // Modify the class
+            new ByteBuddy()
+                    .redefine(targetClass)
+                    .visit(Advice.to(MethodInterceptor.class).on(ElementMatchers.named("callServer")))
+                    .make()
+                    .load(targetClass.getClassLoader(), ClassReloadingStrategy.fromInstalledAgent());
+
+            // Load the main class from the JAR
+            Class<?> mainClass = clientClassLoader.loadClass("br.com.isageek.App");
 
             Method mainMethod = mainClass.getMethod("main", String[].class);
             mainMethod.invoke(null, (Object) new String[] {});
-            return classLoader;
+            clientLoader = clientClassLoader;
         }
     }
 
@@ -59,15 +89,34 @@ public class App {
         return tempFile;
     }
 
-    public static void callBridge(String payload){
-        System.out.println("[Bridge] Received from client: " + payload);
-
+    public static void dispatch(String payload) {
+        System.out.println("[Bridge] Will dispatch payload to client: '" + payload + "'");
         try {
             Class<?> mainClass = serverLoader.loadClass("br.com.isageek.App");
             Method mainMethod = mainClass.getMethod("bridgeReceive", String.class);
             mainMethod.invoke(null, payload);
-        } catch (NoSuchMethodException | ClassNotFoundException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Define the advice class
+    class MethodInterceptor {
+        @OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        static boolean enter(
+                @Origin Method method,
+                @AllArguments Object[] allArguments
+        ) {
+            System.out.println("[Bridge] Entered method");
+            try {
+                Class<?> mainClass = Thread.currentThread().getContextClassLoader().loadClass("br.com.isageek.bridge.App");
+                Method mainMethod = mainClass.getMethod("dispatch", String.class);
+                mainMethod.invoke(null, allArguments[0]);
+            } catch (Exception e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
+            return true; // Indicate to skip the original method execution
         }
     }
 }

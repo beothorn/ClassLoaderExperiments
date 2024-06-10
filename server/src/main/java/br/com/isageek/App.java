@@ -15,6 +15,6 @@ public class App
     }
 
     public static void bridgeReceive(String message){
-        System.out.println("[Server] Server received " +message );
+        System.out.println("[Server] Server received '" +message + "'" );
     }
 }
