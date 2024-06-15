@@ -17,4 +17,8 @@ public class App
     public static void bridgeReceive(String message){
         System.out.println("[Server] Server received '" +message + "'" );
     }
+
+    public static String injectData(String str) {
+        return str + "SERVER INJECTED THIS";
+    }
 }
