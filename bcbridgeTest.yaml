@@ -1,0 +1,22 @@
+applications:
+  - name: "Client"
+    jarsPath: "/home/lucas/dev/java/ClassLoaderExperiments/client/target/output"
+    mainClass: "br.com.isageek.App"
+    redirections:
+      - sourceApplication: "Client"
+        sourceMethod: "br.com.isageek.App#x"
+        destinationMethod: "br.com.isageek.App#y"
+  - name: "Server"
+    dependencies: ["Client"]
+    jarsPath: "/home/lucas/dev/java/ClassLoaderExperiments/server/target/output"
+    mainClass: "br.com.isageek.App"
+    redirections:
+      - sourceApplication: "Client"
+        sourceMethod: "br.com.isageek.App#callServer"
+        destinationMethod: "br.com.isageek.App#bridgeReceive"
+      - sourceApplication: "Client"
+        sourceMethod: "br.com.isageek.SomeOtherClass#getPayload"
+        destinationMethod: "br.com.isageek.FakeClass#fake"
+      - sourceApplication: "Client"
+        sourceMethod: "org.apache.commons.lang3.StringUtils#upperCase"
+        destinationMethod: "br.com.isageek.App#injectData"
