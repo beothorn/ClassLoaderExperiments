@@ -2,6 +2,9 @@ applications:
   - name: "Client"
     jarsPath: "/home/lucas/dev/java/ClassLoaderExperiments/client/target/output"
     mainClass: "br.com.isageek.App"
+    systemProperties:
+      - name: "clientProp"
+        value: "Intercepted!!!CLIENT"
     redirections:
       - sourceApplication: "Client"
         sourceMethod: "br.com.isageek.App#x"
@@ -10,6 +13,9 @@ applications:
     dependencies: ["Client"]
     jarsPath: "/home/lucas/dev/java/ClassLoaderExperiments/server/target/output"
     mainClass: "br.com.isageek.App"
+    systemProperties:
+      - name: "clientProp"
+        value: "Intercepted!!!SERVER"
     redirections:
       - sourceApplication: "Client"
         sourceMethod: "br.com.isageek.App#callServer"
