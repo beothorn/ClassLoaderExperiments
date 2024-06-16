@@ -12,6 +12,8 @@ public class App
     public static void main( String[] args )
     {
         System.out.println( "[Server] Hello World!" );
+        String clientProp = System.getProperty("clientProp");
+        System.out.println("[Server] clientProp: "+clientProp);
     }
 
     public static void bridgeReceive(String message){
@@ -19,6 +21,6 @@ public class App
     }
 
     public static String injectData(String str) {
-        return str + "SERVER INJECTED THIS";
+        return str + " SERVER INJECTED THIS";
     }
 }
