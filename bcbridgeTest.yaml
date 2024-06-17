@@ -5,10 +5,15 @@ applications:
     systemProperties:
       - name: "clientProp"
         value: "Intercepted!!!CLIENT"
+    commandArguments: ["aCli", "bCli", "-c"]
+    environmentVariables:
+      - name: "LANGUAGE"
+        value: "en_us:en"
     redirections:
       - sourceApplication: "Client"
         sourceMethod: "br.com.isageek.App#x"
         destinationMethod: "br.com.isageek.App#y"
+    stdout: "/tmp/client.txt"
   - name: "Server"
     dependencies: ["Client"]
     jarsPath: "/home/lucas/dev/java/ClassLoaderExperiments/server/target/output"
@@ -16,6 +21,10 @@ applications:
     systemProperties:
       - name: "clientProp"
         value: "Intercepted!!!SERVER"
+    environmentVariables:
+      - name: "LANGUAGE"
+        value: "pt_pt:pt"
+    commandArguments: ["aServer", "b!!!!####\\/Server", "-c"]
     redirections:
       - sourceApplication: "Client"
         sourceMethod: "br.com.isageek.App#callServer"
@@ -26,3 +35,4 @@ applications:
       - sourceApplication: "Client"
         sourceMethod: "org.apache.commons.lang3.StringUtils#upperCase"
         destinationMethod: "br.com.isageek.App#injectData"
+    stdout: "/tmp/server.txt"
